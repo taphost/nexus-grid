@@ -16,14 +16,14 @@ Everything is a single `.html` file with no dependencies, no build step, and no 
 
 ```
 ┌─────────────────────────────────┐
-│  Console (system log)      20vh │  ← nexus:log events appear here
+│  Console (system log)          20vh   │  ← nexus:log events appear here
 ├─────────────────────────────────┤
-│  Score Bar                 30px │  ← nexus:game:score events
+│  Score Bar                     30px.  │  ← nexus:game:score events
 ├─────────────────────────────────┤
-│  [TAB][TAB][TAB][TAB][TAB][TAB] │  ← tab bar, 58px
-│                                 │
-│  Game Panel (active tab)        │  ← your game UI lives here
-│                                 │
+│  [TAB][TAB][TAB][TAB][TAB][TAB]       │  ← tab bar, 58px
+│                                       │
+│  Game Panel (active tab)              │  ← your game UI lives here
+│                                       │
 └─────────────────────────────────┘
 ```
 
