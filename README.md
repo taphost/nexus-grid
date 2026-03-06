@@ -43,6 +43,17 @@ nexus.off('event:name', handler)  // unsubscribe
 
 Your game should never touch shell DOM directly. Use events instead.
 
+The bus is implemented as a factory function `createBus()`. The shell instantiates it once as `const nexus = createBus()`, but you can create additional isolated instances in tests without any cleanup overhead:
+
+```js
+// in your test suite
+const bus = createBus(); // fresh instance, no shared state
+bus.on('nexus:log', e => received.push(e));
+bus.emit('nexus:log', { tag: 'ok', msg: 'test' });
+```
+
+Errors thrown inside a handler are caught and logged to the console (`[nexus] handler error on "event:name": ...`) without interrupting the other listeners registered on the same event.
+
 ### Full Event Reference
 
 #### System

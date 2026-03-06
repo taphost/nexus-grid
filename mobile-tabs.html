@@ -1292,7 +1292,7 @@ body {
    All shell features are driven exclusively by events listed in
    the About panel. Your game should never touch shell DOM directly.
    ============================================================ */
-const nexus = (() => {
+function createBus() {
   const listeners = {};
   return {
     on(event, handler) {
@@ -1302,10 +1302,15 @@ const nexus = (() => {
       listeners[event] = (listeners[event] ?? []).filter(fn => fn !== handler);
     },
     emit(event, data) {
-      (listeners[event] ?? []).forEach(fn => fn(data));
+      (listeners[event] ?? []).forEach(fn => {
+        try { fn(data); }
+        catch(e) { console.error(`[nexus] handler error on "${event}":`, e); }
+      });
     }
   };
-})();
+}
+
+const nexus = createBus();
 
 /* ============================================================
    NEXUS SHELL — SETTINGS & PERSISTENCE
