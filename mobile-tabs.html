@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NEXUS GRID — Mobile Game Shell</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600&display=swap');
+
+/* ============================================================
+   NEXUS SHELL — CORE VARIABLES
+   Change these to skin the entire UI instantly.
+   ============================================================ */
+:root {
+  /* Layout */
+  --console-height:   20vh;
+  --scorebar-height:  30px;
+  --tabbar-height:    58px;
+
+  /* Dark theme (default) */
+  --color-accent:     #00ffe7;
+  --color-danger:     #ff3e6c;
+  --color-warning:    #ffe600;
+  --color-bg:         #0a0c10;
+  --color-panel:      #0f1218;
+  --color-border:     #1e2530;
+  --color-text:       #c8d6e5;
+  --color-dim:        #4a5568;
+  --color-console-bg: #000000;
+  --color-console-ts: #2d6e4a;
+  --color-console-msg:#cccccc;
+}
+
+/* ── High Contrast theme — toggled via <html class="hc"> ── */
+:root.hc {
+  --color-accent:     #ffff00;
+  --color-danger:     #ff4400;
+  --color-warning:    #ff8800;
+  --color-bg:         #000000;
+  --color-panel:      #0a0a0a;
+  --color-border:     #444444;
+  --color-text:       #ffffff;
+  --color-dim:        #888888;
+  --color-console-bg: #000000;
+  --color-console-ts: #888888;
+  --color-console-msg:#ffffff;
+}
+:root.hc #shell-console         { box-shadow: 0 4px 30px rgba(255,255,0,0.1); }
+:root.hc .tab-button.is-active  { background: rgba(255,255,0,0.06); }
+:root.hc .stat-value.is-green   { color: #00ff00; }
+:root.hc .progress-fill         { background: #ffff00; }
+:root.hc .progress-fill.is-red  { background: #ff4400; }
+:root.hc .progress-fill.is-warn { background: #ff8800; }
+:root.hc .progress-fill.is-purple { background: #ff00ff; }
+:root.hc .card.is-purple::before  { background: #ff00ff; }
+:root.hc .card.is-purple .card-title { color: #ff00ff; }
+:root.hc .leaderboard-score     { color: #ff8800; }
+:root.hc .chat-bubble.is-mine   { background: rgba(255,255,0,0.1); border-color: rgba(255,255,0,0.3); }
+:root.hc .chat-send-button      { background: #ffff00; }
+:root.hc .toggle-checkbox:checked + .toggle-track { background: rgba(255,255,0,0.15); border-color: var(--color-accent); }
+:root.hc .toggle-checkbox:checked + .toggle-track::after { background: var(--color-accent); }
+
+/* ============================================================
+   NEXUS SHELL — CORE LAYOUT
+   ============================================================ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Rajdhani', sans-serif;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Console ── */
+#shell-console {
+  height: var(--console-height);
+  min-height: var(--console-height);
+  background: var(--color-console-bg);
+  border-bottom: 2px solid var(--color-accent);
+  overflow-y: auto;
+  padding: 8px 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 4px 30px rgba(0,255,231,0.08);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-accent) transparent;
+}
+#shell-console::-webkit-scrollbar       { width: 3px; }
+#shell-console::-webkit-scrollbar-track { background: #000; }
+#shell-console::-webkit-scrollbar-thumb { background: var(--color-accent); }
+
+/* Console header — sticky so it stays visible when log scrolls */
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -8px -10px 6px;
+  padding: 6px 15px 6px 10px;
+  border-bottom: 1px solid #1a1a1a;
+  position: sticky;
+  top: -8px;
+  background: var(--color-console-bg);
+  z-index: 1;
+}
+.console-status-dot { width: 6px; height: 6px; border-radius: 50%; animation: blink-dot 1s steps(1) infinite; }
+.console-status-dot.is-green  { background: #00ff88; }
+.console-status-dot.is-red    { background: #ff3e6c; animation-delay: .3s; }
+.console-status-dot.is-yellow { background: #ffe600; animation-delay: .6s; }
+@keyframes blink-dot { 0%,49%{opacity:1} 50%,100%{opacity:.3} }
+
+.console-title { color: var(--color-accent); font-size: 10px; letter-spacing: 2px; flex: 1; }
+
+/* Toolbar buttons shared style (settings, save, load, hc, info, fullscreen) */
+.toolbar-button {
+  background: none;
+  border: 1px solid var(--color-dim);
+  color: var(--color-dim);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1;
+  transition: all .2s;
+}
+.toolbar-button:active          { border-color: var(--color-accent); color: var(--color-accent); }
+.toolbar-button.is-active       { border-color: var(--color-accent); color: var(--color-accent); }
+
+/* Console log lines */
+.console-line           { margin: 1px 0; color: #fff; }
+.console-line .log-timestamp { color: var(--color-console-ts); margin-right: 6px; }
+.console-line .log-tag  { margin-right: 6px; }
+.console-line .log-tag.is-ok  { color: #00ff88; }
+.console-line .log-tag.is-err { color: #ff3e6c; }
+.console-line .log-tag.is-inf { color: var(--color-accent); }
+.console-line .log-tag.is-wrn { color: #ffe600; }
+.console-line .log-message { color: var(--color-console-msg); }
+
+/* ── Score Bar ── */
+#score-bar {
+  height: var(--scorebar-height);
+  min-height: var(--scorebar-height);
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 20px;
+  flex-shrink: 0;
+}
+.score-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+}
+.score-label { color: var(--color-dim); }
+.score-value {
+  color: var(--color-accent);
+  font-weight: 700;
+  min-width: 48px;
+  transition: color .3s;
+}
+.score-value.is-bumping { color: #fff; }
+
+/* ── Game Area ── */
+#game-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+}
+
+/* ── Tab Bar ── */
+#tab-bar {
+  display: flex;
+  height: var(--tabbar-height);
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+#tab-bar::-webkit-scrollbar { display: none; }
+
+.tab-button {
+  flex: 1;
+  min-width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--color-dim);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .2s;
+  padding: 0 4px;
+  position: relative;
+}
+.tab-button .tab-icon { font-size: 18px; line-height: 1; }
+.tab-button.is-active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 4%, transparent);
+}
+.tab-button .notification-badge {
+  position: absolute;
+  top: 6px; right: 8px;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 4px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ── Tab Panels ── */
+#panels-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+.tab-panel {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+.tab-panel.is-active { display: flex; }
+
+/* ============================================================
+   NEXUS SHELL — UI COMPONENTS
+   Reusable building blocks for game panels.
+   ============================================================ */
+
+/* ── Card ── */
+.card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--color-accent);
+}
+.card.is-danger::before  { background: var(--color-danger); }
+.card.is-warning::before { background: var(--color-warning); }
+.card.is-purple::before  { background: #a855f7; }
+
+.card-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.card.is-danger  .card-title { color: var(--color-danger); }
+.card.is-warning .card-title { color: var(--color-warning); }
+.card.is-purple  .card-title { color: #a855f7; }
+
+/* ── Stat Grid ── */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-box {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+.stat-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+}
+.stat-value.is-green  { color: #00ff88; }
+.stat-value.is-red    { color: var(--color-danger); }
+.stat-value.is-yellow { color: var(--color-warning); }
+.stat-label { font-size: 10px; color: var(--color-dim); margin-top: 3px; letter-spacing: 1px; }
+
+/* ── Progress Bar ── */
+.progress-row { margin: 6px 0; }
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-dim);
+  margin-bottom: 4px;
+}
+.progress-label span:last-child { color: var(--color-text); font-weight: 600; }
+.progress-track { background: #1a1e28; border-radius: 4px; height: 8px; overflow: hidden; }
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--color-accent);
+  transition: width .5s ease;
+}
+.progress-fill.is-red    { background: var(--color-danger); }
+.progress-fill.is-warn   { background: var(--color-warning); }
+.progress-fill.is-purple { background: #a855f7; }
+
+/* ── Item List ── */
+.item-list { display: flex; flex-direction: column; gap: 6px; }
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 10px;
+}
+.item-icon  { font-size: 20px; flex-shrink: 0; }
+.item-info  { flex: 1; min-width: 0; }
+.item-name  { font-weight: 600; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-sub   { font-size: 11px; color: var(--color-dim); }
+.item-value { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: var(--color-accent); flex-shrink: 0; }
+
+/* ── Map Grid ── */
+.map-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; aspect-ratio: 2/1; }
+.map-cell  { border-radius: 3px; aspect-ratio: 1; background: #1a1e28; }
+.map-cell.is-water  { background: #0d2a3d; }
+.map-cell.is-land   { background: #1a2e1a; }
+.map-cell.is-city   { background: #2a3a1a; border: 1px solid #4a6; }
+.map-cell.is-enemy  { background: #3a0f0f; border: 1px solid var(--color-danger); }
+.map-cell.is-player { background: #0a2a2a; border: 1px solid var(--color-accent); box-shadow: 0 0 6px var(--color-accent); }
+.map-cell.is-fog    { background: #111318; opacity: .5; }
+
+/* ── Buttons ── */
+.button-row { display: flex; gap: 8px; }
+.btn {
+  flex: 1;
+  background: none;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  padding: 10px 8px;
+  border-radius: 6px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn:active            { background: color-mix(in srgb, var(--color-accent) 10%, transparent); transform: scale(.97); }
+.btn.is-danger         { border-color: var(--color-danger); color: var(--color-danger); }
+.btn.is-danger:active  { background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
+.btn.is-solid          { background: var(--color-accent); color: #000; font-weight: 700; }
+.btn.is-solid:active   { opacity: .8; }
+
+/* ── Chat ── */
+.chat-list { display: flex; flex-direction: column; gap: 8px; }
+.chat-message { display: flex; gap: 8px; align-items: flex-end; }
+.chat-message.is-mine { flex-direction: row-reverse; }
+.chat-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--color-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.chat-bubble {
+  max-width: 75%;
+  background: var(--color-border);
+  border-radius: 12px 12px 12px 2px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.chat-bubble.is-mine {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 20%, transparent);
+  border-radius: 12px 12px 2px 12px;
+  color: #dff;
+}
+.chat-timestamp { font-size: 9px; color: var(--color-dim); margin-top: 3px; }
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+.chat-text-input {
+  flex: 1;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 8px 14px;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+}
+.chat-send-button {
+  background: var(--color-accent);
+  border: none;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Leaderboard ── */
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0,0,0,.2);
+  border: 1px solid var(--color-border);
+}
+.leaderboard-row.is-player { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 4%, transparent); }
+.leaderboard-rank {
+  font-family: 'Orbitron', monospace;
+  font-size: 16px;
+  font-weight: 900;
+  width: 28px;
+  text-align: center;
+  color: var(--color-dim);
+  flex-shrink: 0;
+}
+.leaderboard-rank.is-gold   { color: #ffd700; }
+.leaderboard-rank.is-silver { color: #cccccc; }
+.leaderboard-rank.is-bronze { color: #cd7f32; }
+.leaderboard-name  { flex: 1; font-weight: 600; font-size: 14px; }
+.leaderboard-score { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: var(--color-warning); }
+
+/* ── Shop Grid ── */
+.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.shop-item {
+  background: rgba(0,0,0,.3);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s;
+}
+.shop-item:active    { border-color: var(--color-accent); }
+.shop-item-icon      { font-size: 30px; margin-bottom: 6px; }
+.shop-item-name      { font-size: 12px; font-weight: 600; color: #fff; }
+.shop-item-price     { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--color-warning); margin-top: 4px; }
+.shop-item-owned     { font-size: 10px; color: #00ff88; margin-top: 2px; }
+
+/* ── Section Header ── */
+.section-header {
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--color-dim);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  margin-top: 4px;
+}
+
+/* ── Avatar Ring ── */
+.avatar-ring {
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 0 12px rgba(0,255,231,.3);
+  background: rgba(0,255,231,.05);
+  flex-shrink: 0;
+}
+
+/* ── Layout Helpers ── */
+.flex-row { display: flex; align-items: center; gap: 12px; }
+.flex-col  { display: flex; flex-direction: column; gap: 3px; }
+.username  { font-family: 'Orbitron', monospace; font-size: 14px; font-weight: 700; color: #fff; }
+.user-tag  { font-size: 11px; color: var(--color-dim); }
+.level-badge {
+  display: inline-block;
+  background: rgba(0,255,231,.1);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 1px;
+}
+
+/* ============================================================
+   NEXUS SHELL — OVERLAYS (Toast, Modals)
+   ============================================================ */
+
+/* ── Toast Notifications ── */
+#toast-container {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  pointer-events: none;
+  width: 90%;
+  max-width: 340px;
+}
+.toast {
+  background: rgba(10,12,16,0.95);
+  border: 1px solid var(--color-accent);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  animation: toast-slide-in .25s ease forwards;
+}
+.toast.is-leaving { animation: toast-slide-out .3s ease forwards; }
+.toast .toast-icon { font-size: 16px; flex-shrink: 0; }
+.toast .toast-message { flex: 1; }
+.toast.is-ok   { border-color: #00ff88; }
+.toast.is-err  { border-color: var(--color-danger); }
+.toast.is-warn { border-color: var(--color-warning); }
+@keyframes toast-slide-in  { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+@keyframes toast-slide-out { from { opacity:1; transform:translateY(0); }     to { opacity:0; transform:translateY(-8px); } }
+
+/* ── Bottom Sheet (shared by all modals) ── */
+.bottom-sheet-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.85);
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px 0;
+}
+.bottom-sheet-overlay.is-open { display: flex; }
+.bottom-sheet {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 14px 14px 8px 8px;
+  width: 92%;
+  max-width: 360px;
+  max-height: 90%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: sheet-slide-up .22s ease;
+}
+.about-body,
+.settings-body,
+.slot-list {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+@keyframes sheet-slide-up { from { transform: translateY(30px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.sheet-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+.sheet-close-button {
+  background: none;
+  border: none;
+  color: var(--color-dim);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+/* ── Save/Load Slot Sheet ── */
+.slot-list { padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.slot-row:active     { border-color: var(--color-accent); }
+.slot-row.is-empty   {}
+.slot-number {
+  font-family: 'Orbitron', monospace;
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--color-accent);
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.slot-row.is-empty .slot-number { color: var(--color-dim); }
+.slot-info { flex: 1; min-width: 0; }
+.slot-name { font-size: 13px; font-weight: 600; color: #fff; }
+.slot-row.is-empty .slot-name { color: var(--color-dim); }
+.slot-meta { font-size: 10px; color: var(--color-dim); margin-top: 2px; font-family: 'Share Tech Mono', monospace; }
+.slot-icon { font-size: 20px; flex-shrink: 0; }
+
+/* ── Settings Sheet ── */
+.settings-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.settings-row  { display: flex; align-items: center; gap: 12px; }
+.settings-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+.settings-label { flex: 1; font-size: 14px; font-weight: 600; color: var(--color-text); }
+.settings-sublabel { font-size: 10px; color: var(--color-dim); margin-top: 1px; }
+.settings-divider { border: none; border-top: 1px solid var(--color-border); margin: 2px 0; }
+
+/* Toggle switch */
+.toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+.toggle-checkbox { opacity: 0; width: 0; height: 0; }
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--color-dim);
+  top: 3px; left: 3px;
+  transition: transform .2s, background .2s;
+}
+.toggle-checkbox:checked + .toggle-track { background: color-mix(in srgb, var(--color-accent) 20%, transparent); border: 1px solid var(--color-accent); }
+.toggle-checkbox:checked + .toggle-track::after { transform: translateX(20px); background: var(--color-accent); }
+
+/* Volume slider */
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 4px;
+  background: var(--color-border);
+  outline: none;
+  cursor: pointer;
+}
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+  border: 2px solid var(--color-bg);
+}
+.volume-slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+  border: 2px solid var(--color-bg);
+}
+.volume-display {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--color-accent);
+  width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Color pickers */
+.color-swatch {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.color-swatch input[type=color] {
+  width: 150%;
+  height: 150%;
+  margin: -25%;
+  border: none;
+  cursor: pointer;
+  background: none;
+}
+
+/* Danger button */
+.btn-full-danger {
+  width: 100%;
+  background: none;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  padding: 11px;
+  border-radius: 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-full-danger:active { background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
+
+/* Double-confirm box */
+.confirm-box {
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  border: 1px solid var(--color-danger);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+.confirm-box.is-open { display: flex; }
+.confirm-message { font-size: 13px; color: #fff; line-height: 1.4; }
+.confirm-message strong { color: var(--color-danger); }
+.confirm-buttons { display: flex; gap: 8px; }
+.confirm-buttons button {
+  flex: 1;
+  padding: 9px;
+  border-radius: 6px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-text);
+  text-transform: uppercase;
+  transition: all .15s;
+}
+.confirm-buttons .confirm-yes-button { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+.confirm-buttons .confirm-yes-button:active { opacity: .8; }
+.confirm-buttons .confirm-no-button:active  { background: rgba(255,255,255,0.05); }
+
+/* ── About Sheet ── */
+.about-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.about-logo {
+  font-family: 'Orbitron', monospace;
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--color-accent);
+  letter-spacing: 4px;
+  text-align: center;
+}
+.about-version { text-align: center; font-size: 10px; color: var(--color-dim); font-family: 'Share Tech Mono', monospace; letter-spacing: 2px; }
+.about-desc { font-size: 13px; color: var(--color-text); line-height: 1.6; }
+.about-events {
+  background: rgba(0,0,0,.4);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  line-height: 2;
+}
+.about-events .ev-group { color: var(--color-dim); font-size: 9px; letter-spacing: 2px; margin-top: 6px; }
+.about-events .ev-name  { color: var(--color-accent); }
+.about-events .ev-desc  { color: #888; }
+
+/* ── Landscape Warning ── */
+#landscape-warning {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: #000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-family: 'Orbitron', monospace;
+  color: var(--color-accent);
+}
+#landscape-warning .lw-icon { font-size: 48px; }
+#landscape-warning .lw-text { font-size: 12px; letter-spacing: 2px; text-align: center; }
+@media (orientation: landscape) and (max-height: 500px) {
+  #landscape-warning { display: flex; }
+}
+
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     NEXUS SHELL — LANDSCAPE WARNING
+     ============================================================ -->
+<div id="landscape-warning">
+  <div class="lw-icon">📱</div>
+  <div class="lw-text">ROTATE DEVICE<br>PORTRAIT MODE REQUIRED</div>
+</div>
+
+<!-- ============================================================
+     NEXUS SHELL — CONSOLE
+     System log strip at the top. Write to it via:
+       nexus.emit('nexus:log', { tag: 'ok'|'err'|'inf'|'wrn', msg: '...' })
+     ============================================================ -->
+<div id="shell-console">
+  <div class="console-header">
+    <div class="console-status-dot is-green"></div>
+    <div class="console-status-dot is-red"></div>
+    <div class="console-status-dot is-yellow"></div>
+    <span class="console-title">NEXUS // SYS LOG</span>
+    <button class="toolbar-button" id="btn-settings" title="Settings">⚙</button>
+    <button class="toolbar-button" id="btn-save"     title="Save">💾</button>
+    <button class="toolbar-button" id="btn-load"     title="Load">📂</button>
+    <button class="toolbar-button" id="btn-info"     title="About">ℹ</button>
+    <button class="toolbar-button" id="btn-fullscreen" title="Fullscreen">⛶</button>
+  </div>
+  <!-- Log lines injected here by nexus:log events -->
+</div>
+
+<!-- ============================================================
+     NEXUS SHELL — SCORE BAR
+     Update via: nexus.emit('nexus:game:score', { score, level, xp })
+     ============================================================ -->
+<div id="score-bar">
+  <div class="score-item">
+    <span class="score-label">SCORE</span>
+    <span class="score-value" id="score-val">000000</span>
+  </div>
+  <div class="score-item">
+    <span class="score-label">LVL</span>
+    <span class="score-value" id="score-lvl">34</span>
+  </div>
+  <div class="score-item">
+    <span class="score-label">XP</span>
+    <span class="score-value" id="score-xp">3200</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     NEXUS SHELL — GAME AREA
+     ============================================================ -->
+<div id="game-area">
+
+  <!-- Toast container — positioned over game area -->
+  <div id="toast-container"></div>
+
+  <!-- ── Settings Modal ── -->
+  <div class="bottom-sheet-overlay" id="modal-settings">
+    <div class="bottom-sheet">
+      <div class="sheet-header">
+        <span class="sheet-title">⚙ Settings</span>
+        <button class="sheet-close-button" data-close="modal-settings">✕</button>
+      </div>
+      <div class="settings-body">
+
+        <div class="settings-row">
+          <div class="settings-icon">🔔</div>
+          <div class="flex-col" style="flex:1">
+            <div class="settings-label">Audio</div>
+            <div class="settings-sublabel">Game sounds</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" class="toggle-checkbox" id="set-audio" checked>
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+
+        <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="settings-icon">🔊</div>
+            <div class="settings-label">Volume</div>
+            <div class="volume-display" id="vol-display">70%</div>
+          </div>
+          <input type="range" class="volume-slider" id="set-volume" min="0" max="100" value="70">
+        </div>
+
+        <hr class="settings-divider">
+
+        <div class="settings-row">
+          <div class="settings-icon">📳</div>
+          <div class="flex-col" style="flex:1">
+            <div class="settings-label">Haptic Feedback</div>
+            <div class="settings-sublabel">Vibration on events</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" class="toggle-checkbox" id="set-vibro" checked>
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+
+        <hr class="settings-divider">
+
+        <!-- High contrast toggle -->
+        <div class="settings-row">
+          <div class="settings-icon">◑</div>
+          <div class="flex-col" style="flex:1">
+            <div class="settings-label">High Contrast</div>
+            <div class="settings-sublabel">Maximum readability</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" class="toggle-checkbox" id="set-hc">
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+
+        <hr class="settings-divider">
+
+        <!-- Theme color pickers -->
+        <div class="settings-row">
+          <div class="settings-icon">🎨</div>
+          <div class="settings-label">Accent Colors</div>
+          <div style="display:flex;gap:6px;">
+            <div class="color-swatch" title="Primary accent">
+              <input type="color" id="pick-accent"  value="#00ffe7">
+            </div>
+            <div class="color-swatch" title="Danger color">
+              <input type="color" id="pick-danger"  value="#ff3e6c">
+            </div>
+            <div class="color-swatch" title="Warning color">
+              <input type="color" id="pick-warning" value="#ffe600">
+            </div>
+          </div>
+        </div>
+
+        <hr class="settings-divider">
+
+        <button class="btn-full-danger" id="btn-clear-saves">🗑 Clear All Saves</button>
+        <div class="confirm-box" id="confirm-clear">
+          <div class="confirm-message">⚠ <strong>Warning!</strong> All 3 save slots will be permanently deleted. Are you sure?</div>
+          <div class="confirm-buttons">
+            <button class="confirm-no-button"  id="btn-confirm-no">Cancel</button>
+            <button class="confirm-yes-button" id="btn-confirm-yes">Delete</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Save/Load Slot Modal ── -->
+  <div class="bottom-sheet-overlay" id="modal-slots">
+    <div class="bottom-sheet">
+      <div class="sheet-header">
+        <span class="sheet-title" id="slot-modal-title">Save to slot</span>
+        <button class="sheet-close-button" data-close="modal-slots">✕</button>
+      </div>
+      <div class="slot-list" id="slot-list"></div>
+    </div>
+  </div>
+
+  <!-- ── About Modal ── -->
+  <div class="bottom-sheet-overlay" id="modal-about">
+    <div class="bottom-sheet">
+      <div class="sheet-header">
+        <span class="sheet-title">About</span>
+        <button class="sheet-close-button" data-close="modal-about">✕</button>
+      </div>
+      <div class="about-body">
+        <div class="about-logo">NEXUS GRID</div>
+        <div class="about-version">MOBILE GAME SHELL — v1.0.0</div>
+        <div class="about-desc">
+          A ready-to-use mobile browser game shell. Drop your game logic in, wire it up via the event bus, and ship.
+        </div>
+        <div class="about-events">
+          <div class="ev-group">// SYSTEM</div>
+          <div><span class="ev-name">nexus:log</span> <span class="ev-desc">{ tag, msg } — write to console</span></div>
+          <div><span class="ev-name">nexus:toast</span> <span class="ev-desc">{ msg, type } — show toast</span></div>
+          <div><span class="ev-name">nexus:badge</span> <span class="ev-desc">{ tab, count } — set tab badge</span></div>
+          <div><span class="ev-name">nexus:tab</span> <span class="ev-desc">{ id } — switch active tab</span></div>
+          <div><span class="ev-name">nexus:alert</span> <span class="ev-desc">{ msg, type } — blocking alert</span></div>
+          <div class="ev-group">// GAME</div>
+          <div><span class="ev-name">nexus:game:start</span> <span class="ev-desc">— game started</span></div>
+          <div><span class="ev-name">nexus:game:pause</span> <span class="ev-desc">— game paused</span></div>
+          <div><span class="ev-name">nexus:game:over</span> <span class="ev-desc">— game over</span></div>
+          <div><span class="ev-name">nexus:game:score</span> <span class="ev-desc">{ score, level, xp }</span></div>
+          <div class="ev-group">// AUDIO</div>
+          <div><span class="ev-name">nexus:audio:play</span> <span class="ev-desc">{ src } — play sound</span></div>
+          <div><span class="ev-name">nexus:audio:stop</span> <span class="ev-desc">— stop current sound</span></div>
+          <div><span class="ev-name">nexus:audio:volume</span> <span class="ev-desc">{ value } — set volume 0-1</span></div>
+          <div class="ev-group">// DEVICE</div>
+          <div><span class="ev-name">nexus:haptic</span> <span class="ev-desc">{ pattern } — vibrate</span></div>
+          <div><span class="ev-name">nexus:net:online</span> <span class="ev-desc">— connection restored</span></div>
+          <div><span class="ev-name">nexus:net:offline</span> <span class="ev-desc">— connection lost</span></div>
+          <div><span class="ev-name">nexus:app:visible</span> <span class="ev-desc">— app in foreground</span></div>
+          <div><span class="ev-name">nexus:app:hidden</span> <span class="ev-desc">— app backgrounded</span></div>
+          <div class="ev-group">// PERSISTENCE</div>
+          <div><span class="ev-name">nexus:save</span> <span class="ev-desc">{ slot } — trigger save</span></div>
+          <div><span class="ev-name">nexus:load</span> <span class="ev-desc">{ slot } — trigger load</span></div>
+          <div class="ev-group">// SETTINGS</div>
+          <div><span class="ev-name">nexus:settings:changed</span> <span class="ev-desc">{ key, value }</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab Bar ── -->
+  <div id="tab-bar">
+    <button class="tab-button is-active" data-tab="map">
+      <span class="tab-icon">🗺</span>MAP
+    </button>
+    <button class="tab-button" data-tab="stats">
+      <span class="tab-icon">📊</span>STATS
+    </button>
+    <button class="tab-button" data-tab="inv">
+      <span class="tab-icon">🎒</span>INV
+    </button>
+    <button class="tab-button" data-tab="chat">
+      <span class="tab-icon">💬</span>CHAT
+    </button>
+    <button class="tab-button" data-tab="rank">
+      <span class="tab-icon">🏆</span>RANK
+    </button>
+    <button class="tab-button" data-tab="shop">
+      <span class="tab-icon">🛒</span>SHOP
+    </button>
+  </div>
+
+  <!-- ── Tab Panels ── -->
+  <div id="panels-container">
+
+    <!-- ============================================================
+         DEMO CONTENT — Replace panels below with your game screens.
+         Each panel is wired to a tab via data-tab matching.
+         ============================================================ -->
+
+    <!-- MAP -->
+    <div class="tab-panel is-active" id="panel-map">
+      <div class="card">
+        <div class="card-title">⬡ Tactical Map — Sector 7G</div>
+        <div class="map-grid" id="map-grid"></div>
+        <div style="margin-top:10px;font-size:11px;color:var(--color-dim);display:flex;gap:12px;flex-wrap:wrap;">
+          <span>🟦 You</span><span style="color:#f55">🟥 Enemy</span>
+          <span style="color:#4a6">🟩 City</span><span>⬛ Fog</span>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="btn">◀ W</button>
+        <button class="btn">▲ N</button>
+        <button class="btn">▼ S</button>
+        <button class="btn">E ▶</button>
+      </div>
+      <div class="card">
+        <div class="card-title">📍 Current Position</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;line-height:2;">
+          <span style="color:var(--color-dim)">COORD</span> &nbsp;X:47 Y:31<br>
+          <span style="color:var(--color-dim)">ZONE &nbsp;</span> Contested Plains<br>
+          <span style="color:var(--color-dim)">THREAT</span> <span style="color:var(--color-danger)">HIGH ⚠</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="tab-panel" id="panel-stats">
+      <div class="card">
+        <div class="card-title">◉ Commander Profile</div>
+        <div class="flex-row">
+          <div class="avatar-ring">🧑‍✈️</div>
+          <div class="flex-col">
+            <div class="username">KIRA_X47</div>
+            <div class="user-tag">Commander • Guild: Iron Wolves</div>
+            <div class="level-badge">LVL 34</div>
+          </div>
+        </div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-value is-green">2,841</div><div class="stat-label">POWER</div></div>
+        <div class="stat-box"><div class="stat-value is-yellow">47</div><div class="stat-label">VICTORIES</div></div>
+        <div class="stat-box"><div class="stat-value is-red">12</div><div class="stat-label">DEFEATS</div></div>
+        <div class="stat-box"><div class="stat-value" style="color:#a855f7">79%</div><div class="stat-label">WIN RATE</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚡ Attributes</div>
+        <div class="progress-row">
+          <div class="progress-label"><span>Attack</span><span>82/100</span></div>
+          <div class="progress-track"><div class="progress-fill is-red" style="width:82%"></div></div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label"><span>Defense</span><span>65/100</span></div>
+          <div class="progress-track"><div class="progress-fill" style="width:65%"></div></div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label"><span>Speed</span><span>91/100</span></div>
+          <div class="progress-track"><div class="progress-fill is-warn" style="width:91%"></div></div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label"><span>Stealth</span><span>44/100</span></div>
+          <div class="progress-track"><div class="progress-fill is-purple" style="width:44%"></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📈 XP Progress</div>
+        <div class="progress-row">
+          <div class="progress-label"><span>LVL 34 → 35</span><span>3,200 / 5,000 XP</span></div>
+          <div class="progress-track" style="height:14px">
+            <div class="progress-fill is-warn" style="width:64%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div class="tab-panel" id="panel-inv">
+      <div class="card is-danger">
+        <div class="card-title">⚔ Weapons</div>
+        <div class="item-list">
+          <div class="item-row">
+            <div class="item-icon">🗡</div>
+            <div class="item-info"><div class="item-name">Plasma Blade MK-II</div><div class="item-sub">Attack +48 • Rare</div></div>
+            <div class="item-value">E</div>
+          </div>
+          <div class="item-row">
+            <div class="item-icon">🔫</div>
+            <div class="item-info"><div class="item-name">Gauss Rifle X9</div><div class="item-sub">Range +30 • Uncommon</div></div>
+            <div class="item-value" style="color:var(--color-dim)">BAG</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🛡 Armor</div>
+        <div class="item-list">
+          <div class="item-row">
+            <div class="item-icon">🦺</div>
+            <div class="item-info"><div class="item-name">Nano-Weave Vest</div><div class="item-sub">Defense +35 • Epic</div></div>
+            <div class="item-value">E</div>
+          </div>
+          <div class="item-row">
+            <div class="item-icon">⛑</div>
+            <div class="item-info"><div class="item-name">Combat Helm T4</div><div class="item-sub">Defense +20 • Common</div></div>
+            <div class="item-value">E</div>
+          </div>
+        </div>
+      </div>
+      <div class="card is-warning">
+        <div class="card-title">💊 Consumables</div>
+        <div class="item-list">
+          <div class="item-row">
+            <div class="item-icon">🧪</div>
+            <div class="item-info"><div class="item-name">Med-Pack Alpha</div><div class="item-sub">+150 HP instant</div></div>
+            <div class="item-value" style="color:var(--color-warning)">×4</div>
+          </div>
+          <div class="item-row">
+            <div class="item-icon">⚡</div>
+            <div class="item-info"><div class="item-name">Stim Booster</div><div class="item-sub">Speed ×2 for 30s</div></div>
+            <div class="item-value" style="color:var(--color-warning)">×2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="tab-panel" id="panel-chat">
+      <div class="card" style="flex:1;display:flex;flex-direction:column;gap:10px;min-height:0;">
+        <div class="card-title" style="flex-shrink:0">💬 Guild Chat — Iron Wolves</div>
+        <div class="chat-list" style="flex:1;overflow-y:auto;min-height:0;padding-right:2px;">
+          <div class="chat-message"><div class="chat-avatar">🐺</div><div><div class="chat-bubble">North base is under siege! Send backup NOW</div><div class="chat-timestamp">14:32 · WOLF_ALPHA</div></div></div>
+          <div class="chat-message"><div class="chat-avatar">🦊</div><div><div class="chat-bubble">On my way, eta 2 mins. Hold the line</div><div class="chat-timestamp">14:33 · FOXHOUND</div></div></div>
+          <div class="chat-message is-mine"><div class="chat-avatar">🧑‍✈️</div><div><div class="chat-bubble is-mine">Deploying drone support from sector 7</div><div class="chat-timestamp">14:33 · KIRA_X47 (you)</div></div></div>
+          <div class="chat-message"><div class="chat-avatar">🐻</div><div><div class="chat-bubble">I'm pinned at grid C4, need evac 🆘</div><div class="chat-timestamp">14:34 · GRIMM</div></div></div>
+          <div class="chat-message"><div class="chat-avatar">🦊</div><div><div class="chat-bubble">GRIMM stay low, incoming cover fire in 10</div><div class="chat-timestamp">14:35 · FOXHOUND</div></div></div>
+          <div class="chat-message is-mine"><div class="chat-avatar">🧑‍✈️</div><div><div class="chat-bubble is-mine">Drone is up, north flank suppressed ✅</div><div class="chat-timestamp">14:36 · KIRA_X47 (you)</div></div></div>
+        </div>
+        <div class="chat-input-row" style="flex-shrink:0;">
+          <input class="chat-text-input" placeholder="Message guild…" type="text">
+          <button class="chat-send-button">➤</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RANK -->
+    <div class="tab-panel" id="panel-rank">
+      <div class="card">
+        <div class="card-title">🏆 Global Leaderboard</div>
+        <div class="item-list">
+          <div class="leaderboard-row"><div class="leaderboard-rank is-gold">1</div><div class="chat-avatar" style="width:28px;height:28px;font-size:14px;">⚡</div><div class="leaderboard-name">ZEUS_CMD</div><div class="leaderboard-score">98,441</div></div>
+          <div class="leaderboard-row"><div class="leaderboard-rank is-silver">2</div><div class="chat-avatar" style="width:28px;height:28px;font-size:14px;">🔥</div><div class="leaderboard-name">PYREX_77</div><div class="leaderboard-score">87,200</div></div>
+          <div class="leaderboard-row"><div class="leaderboard-rank is-bronze">3</div><div class="chat-avatar" style="width:28px;height:28px;font-size:14px;">🌪</div><div class="leaderboard-name">STORM_IX</div><div class="leaderboard-score">74,890</div></div>
+          <div class="leaderboard-row"><div class="leaderboard-rank">4</div><div class="chat-avatar" style="width:28px;height:28px;font-size:14px;">🐉</div><div class="leaderboard-name">DRAKO</div><div class="leaderboard-score">71,110</div></div>
+          <div class="leaderboard-row"><div class="leaderboard-rank">5</div><div class="chat-avatar" style="width:28px;height:28px;font-size:14px;">💎</div><div class="leaderboard-name">CELEST</div><div class="leaderboard-score">68,340</div></div>
+        </div>
+      </div>
+      <div class="card" style="border-color:var(--color-accent)">
+        <div class="card-title">📍 Your Position</div>
+        <div class="leaderboard-row is-player" style="background:none;border:none;padding:0;">
+          <div class="leaderboard-rank" style="color:var(--color-accent);font-size:20px">17</div>
+          <div class="avatar-ring" style="width:40px;height:40px;font-size:20px;">🧑‍✈️</div>
+          <div class="flex-col" style="flex:1"><div class="leaderboard-name">KIRA_X47</div><div class="user-tag">Iron Wolves</div></div>
+          <div class="leaderboard-score">41,280</div>
+        </div>
+        <div class="progress-row" style="margin-top:10px">
+          <div class="progress-label"><span>To rank #16</span><span>+3,120 pts needed</span></div>
+          <div class="progress-track"><div class="progress-fill" style="width:72%"></div></div>
+        </div>
+      </div>
+      <div class="card is-purple">
+        <div class="card-title">🏅 Guild Ranking</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;line-height:2.2;">
+          <span style="color:var(--color-dim)">GUILD &nbsp;&nbsp;</span> Iron Wolves<br>
+          <span style="color:var(--color-dim)">GUILD RANK</span> <span style="color:#a855f7">#3 Global</span><br>
+          <span style="color:var(--color-dim)">MEMBERS</span> 28 / 50
+        </div>
+      </div>
+    </div>
+
+    <!-- SHOP -->
+    <div class="tab-panel" id="panel-shop">
+      <div class="card is-warning" style="display:flex;align-items:center;flex-direction:row;gap:10px;">
+        <div style="flex:1">
+          <div class="card-title" style="margin:0 0 2px">💰 Balance</div>
+          <div style="font-family:'Orbitron',monospace;font-size:24px;font-weight:900;color:var(--color-warning)">4,820 <span style="font-size:14px;color:var(--color-dim)">CREDITS</span></div>
+        </div>
+        <button class="btn is-solid" style="max-width:100px;padding:8px">+ TOP UP</button>
+      </div>
+      <div class="section-header">Featured Items</div>
+      <div class="shop-grid">
+        <div class="shop-item"><div class="shop-item-icon">⚔</div><div class="shop-item-name">Void Blade</div><div class="shop-item-price">💰 1,200</div></div>
+        <div class="shop-item"><div class="shop-item-icon">🛡</div><div class="shop-item-name">Aegis Shield</div><div class="shop-item-price">💰 980</div></div>
+        <div class="shop-item"><div class="shop-item-icon">🚀</div><div class="shop-item-name">Jetpack X3</div><div class="shop-item-price">💰 2,500</div></div>
+        <div class="shop-item"><div class="shop-item-icon">🧬</div><div class="shop-item-name">Nano Regen</div><div class="shop-item-price">💰 450</div><div class="shop-item-owned">✓ OWNED</div></div>
+      </div>
+      <div class="section-header">Skins</div>
+      <div class="shop-grid">
+        <div class="shop-item"><div class="shop-item-icon">👾</div><div class="shop-item-name">Cyber Ghost</div><div class="shop-item-price">💰 3,000</div></div>
+        <div class="shop-item"><div class="shop-item-icon">🔮</div><div class="shop-item-name">Specter Dark</div><div class="shop-item-price">💰 1,800</div><div class="shop-item-owned">✓ OWNED</div></div>
+      </div>
+      <div class="button-row">
+        <button class="btn">View All</button>
+        <button class="btn is-solid">Daily Deals 🔥</button>
+      </div>
+    </div>
+
+  </div><!-- /panels-container -->
+</div><!-- /game-area -->
+
+<script>
+/* ============================================================
+   NEXUS SHELL — EVENT BUS
+   The single communication channel between your game and the shell.
+
+   Usage:
+     nexus.on('nexus:log', handler)       — subscribe
+     nexus.emit('nexus:log', { ... })     — publish
+     nexus.off('nexus:log', handler)      — unsubscribe
+
+   All shell features are driven exclusively by events listed in
+   the About panel. Your game should never touch shell DOM directly.
+   ============================================================ */
+const nexus = (() => {
+  const listeners = {};
+  return {
+    on(event, handler) {
+      (listeners[event] ??= []).push(handler);
+    },
+    off(event, handler) {
+      listeners[event] = (listeners[event] ?? []).filter(fn => fn !== handler);
+    },
+    emit(event, data) {
+      (listeners[event] ?? []).forEach(fn => fn(data));
+    }
+  };
+})();
+
+/* ============================================================
+   NEXUS SHELL — SETTINGS & PERSISTENCE
+   Reads/writes to localStorage under 'nexus-cfg'.
+   Emits 'nexus:settings:changed' on every change.
+   ============================================================ */
+const DEFAULT_SETTINGS = {
+  audioEnabled: true,
+  volume:       70,
+  vibroEnabled: true,
+  highContrast: false,
+  accentColor:  '#00ffe7',
+  dangerColor:  '#ff3e6c',
+  warningColor: '#ffe600',
+};
+
+function loadSettings() {
+  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem('nexus-cfg') || '{}') }; }
+  catch { return { ...DEFAULT_SETTINGS }; }
+}
+
+function saveSettings(cfg) {
+  localStorage.setItem('nexus-cfg', JSON.stringify(cfg));
+}
+
+let cfg = loadSettings();
+
+// Apply custom accent colors to CSS variables.
+// Called at boot and whenever a color picker changes.
+// NOTE: when High Contrast is active, :root.hc overrides these via CSS specificity,
+// so the custom colors are stored but visually suppressed until HC is turned off.
+function applyThemeColors() {
+  const root = document.documentElement;
+  root.style.setProperty('--color-accent',  cfg.accentColor);
+  root.style.setProperty('--color-danger',  cfg.dangerColor);
+  root.style.setProperty('--color-warning', cfg.warningColor);
+}
+
+// Toggle High Contrast mode by adding/removing the 'hc' class on <html>.
+// The :root.hc CSS block overrides all --color-* variables with HC values.
+// When turning HC off, applyThemeColors() restores the user's custom colors
+// so they are not lost after an HC session.
+function applyHighContrast(active) {
+  document.documentElement.classList.toggle('hc', active);
+  if (!active) applyThemeColors();
+}
+
+applyThemeColors();
+applyHighContrast(cfg.highContrast);
+
+/* ============================================================
+   NEXUS SHELL — HAPTIC
+   Respects the vibroEnabled setting.
+   Emit: nexus.emit('nexus:haptic', { pattern: 30 })
+   ============================================================ */
+nexus.on('nexus:haptic', ({ pattern = 30 } = {}) => {
+  if (cfg.vibroEnabled && navigator.vibrate) navigator.vibrate(pattern);
+});
+
+/* ============================================================
+   NEXUS SHELL — AUDIO
+   Emit: nexus.emit('nexus:audio:play',   { src: './sound.mp3' })
+         nexus.emit('nexus:audio:stop')
+         nexus.emit('nexus:audio:volume', { value: 0.8 })
+   ============================================================ */
+const shellAudio = new Audio();
+
+nexus.on('nexus:audio:play', ({ src } = {}) => {
+  if (!cfg.audioEnabled || !src) return;
+  shellAudio.src = src;
+  shellAudio.volume = cfg.volume / 100;
+  shellAudio.play().catch(() => {});
+});
+
+nexus.on('nexus:audio:stop', () => {
+  shellAudio.pause();
+  shellAudio.currentTime = 0;
+});
+
+nexus.on('nexus:audio:volume', ({ value } = {}) => {
+  // value expected in range 0-1
+  const clamped = Math.max(0, Math.min(1, value ?? 1));
+  cfg.volume = Math.round(clamped * 100);
+  shellAudio.volume = clamped;
+  volumeSlider.value = cfg.volume;
+  volumeDisplay.textContent = cfg.volume + '%';
+  saveSettings(cfg);
+});
+
+/* ============================================================
+   NEXUS SHELL — CONSOLE LOG
+   Emit: nexus.emit('nexus:log', { tag: 'ok'|'inf'|'wrn'|'err', msg: 'text' })
+   ============================================================ */
+const consoleEl = document.getElementById('shell-console');
+
+nexus.on('nexus:log', ({ tag = 'inf', msg = '' } = {}) => {
+  const now = new Date();
+  const timestamp = [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map(n => String(n).padStart(2, '0')).join(':');
+  const line = document.createElement('div');
+  line.className = 'console-line';
+  line.innerHTML = `<span class="log-timestamp">${timestamp}</span>`
+                 + `<span class="log-tag is-${tag}">[${tag.toUpperCase()}]</span>`
+                 + `<span class="log-message">${msg}</span>`;
+  consoleEl.appendChild(line);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+});
+
+/* ============================================================
+   NEXUS SHELL — TOAST NOTIFICATIONS
+   Emit: nexus.emit('nexus:toast', { msg: 'text', type: 'ok'|'err'|'warn'|'inf' })
+   ============================================================ */
+const toastContainer = document.getElementById('toast-container');
+
+nexus.on('nexus:toast', ({ msg = '', type = 'inf', duration = 2800 } = {}) => {
+  const ICONS = { ok: '✅', err: '❌', warn: '⚠️', inf: 'ℹ️', save: '💾' };
+  const toast = document.createElement('div');
+  toast.className = `toast is-${type}`;
+  toast.innerHTML = `<span class="toast-icon">${ICONS[type] ?? 'ℹ️'}</span>`
+                  + `<span class="toast-message">${msg}</span>`;
+  toastContainer.appendChild(toast);
+  nexus.emit('nexus:haptic', { pattern: type === 'err' ? [50, 30, 50] : 30 });
+  setTimeout(() => {
+    toast.classList.add('is-leaving');
+    toast.addEventListener('animationend', () => toast.remove());
+  }, duration);
+});
+
+/* ============================================================
+   NEXUS SHELL — TAB SWITCHING
+   Emit: nexus.emit('nexus:tab', { id: 'map' })
+   ============================================================ */
+const tabButtons = document.querySelectorAll('.tab-button');
+const tabPanels  = document.querySelectorAll('.tab-panel');
+
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    nexus.emit('nexus:tab', { id: btn.dataset.tab });
+  });
+});
+
+nexus.on('nexus:tab', ({ id } = {}) => {
+  tabButtons.forEach(b => b.classList.toggle('is-active', b.dataset.tab === id));
+  tabPanels.forEach(p  => p.classList.toggle('is-active',  p.id === `panel-${id}`));
+});
+
+/* ============================================================
+   NEXUS SHELL — NOTIFICATION BADGES
+   Emit: nexus.emit('nexus:badge', { tab: 'chat', count: 3 })
+         count: 0 removes the badge
+   ============================================================ */
+nexus.on('nexus:badge', ({ tab, count } = {}) => {
+  const btn = document.querySelector(`.tab-button[data-tab="${tab}"]`);
+  if (!btn) return;
+  btn.querySelector('.notification-badge')?.remove();
+  if (count > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'notification-badge';
+    badge.textContent = count;
+    btn.appendChild(badge);
+  }
+});
+
+/* ============================================================
+   NEXUS SHELL — SCORE BAR
+   Emit: nexus.emit('nexus:game:score', { score: 1000, level: 5, xp: 200 })
+   ============================================================ */
+function bumpScoreValue(elementId, value) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  el.textContent = value;
+  el.classList.add('is-bumping');
+  setTimeout(() => el.classList.remove('is-bumping'), 300);
+}
+
+nexus.on('nexus:game:score', ({ score, level, xp } = {}) => {
+  if (score !== undefined) bumpScoreValue('score-val', String(score).padStart(6, '0'));
+  if (level !== undefined) bumpScoreValue('score-lvl', level);
+  if (xp    !== undefined) bumpScoreValue('score-xp',  xp);
+});
+
+/* ============================================================
+   NEXUS SHELL — GAME LIFECYCLE
+   Emit: nexus.emit('nexus:game:start')
+         nexus.emit('nexus:game:pause')
+         nexus.emit('nexus:game:over')
+   Shell logs these automatically; attach your own handlers too.
+   ============================================================ */
+nexus.on('nexus:game:start', () => nexus.emit('nexus:log', { tag: 'ok',  msg: 'Game started' }));
+nexus.on('nexus:game:pause', () => nexus.emit('nexus:log', { tag: 'wrn', msg: 'Game paused' }));
+nexus.on('nexus:game:over',  () => nexus.emit('nexus:log', { tag: 'err', msg: 'Game over' }));
+
+/* ============================================================
+   NEXUS SHELL — ALERT (blocking modal)
+   Emit: nexus.emit('nexus:alert', { msg: 'text', type: 'ok'|'err'|'warn'|'inf' })
+   ============================================================ */
+nexus.on('nexus:alert', ({ msg = '', type = 'inf' } = {}) => {
+  const ICONS = { ok: '✅', err: '❌', warn: '⚠️', inf: 'ℹ️' };
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--color-panel);border:1px solid var(--color-accent);border-radius:12px;padding:24px;max-width:320px;width:100%;display:flex;flex-direction:column;gap:16px;font-family:Rajdhani,sans-serif;animation:sheet-slide-up .22s ease;';
+  const borderColor = { ok: '#00ff88', err: 'var(--color-danger)', warn: 'var(--color-warning)', inf: 'var(--color-accent)' }[type] ?? 'var(--color-accent)';
+  box.style.borderColor = borderColor;
+  box.innerHTML = `
+    <div style="font-size:28px;text-align:center">${ICONS[type] ?? 'ℹ️'}</div>
+    <div style="font-size:14px;color:var(--color-text);line-height:1.5;text-align:center">${msg}</div>
+    <button id="alert-ok-btn" style="background:var(--color-accent);border:none;border-radius:6px;padding:10px;font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;color:#000;text-transform:uppercase;">OK</button>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  box.querySelector('#alert-ok-btn').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  nexus.emit('nexus:haptic', { pattern: 40 });
+});
+
+/* ============================================================
+   NEXUS SHELL — SAVE SLOTS
+   3 localStorage slots. Each stores game state as JSON.
+   Emit: nexus.emit('nexus:save', { slot: 1 })
+         nexus.emit('nexus:load', { slot: 1 })
+   ============================================================ */
+const SAVE_SLOT_COUNT = 3;
+
+function getSaveKey(slotNumber) { return `nexus-save-${slotNumber}`; }
+
+function readSlot(slotNumber) {
+  try { return JSON.parse(localStorage.getItem(getSaveKey(slotNumber))); }
+  catch { return null; }
+}
+
+function buildSlotRows(mode) {
+  const list = document.getElementById('slot-list');
+  list.innerHTML = '';
+  for (let i = 1; i <= SAVE_SLOT_COUNT; i++) {
+    const data = readSlot(i);
+    const row  = document.createElement('div');
+    row.className = 'slot-row' + (data ? '' : ' is-empty');
+    const dateStr = data
+      ? new Date(data.savedAt).toLocaleString('en-GB', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
+      : null;
+    row.innerHTML = `
+      <div class="slot-number">${i}</div>
+      <div class="slot-info">
+        <div class="slot-name">${data ? `SAVE ${i}` : 'Empty'}</div>
+        <div class="slot-meta">${data ? `Tab: ${(data.activeTab ?? '—').toUpperCase()} · ${dateStr}` : 'No data'}</div>
+      </div>
+      <div class="slot-icon">${data ? '💾' : '➕'}</div>`;
+    row.addEventListener('click', () => {
+      closeModal('modal-slots');
+      if (mode === 'save') nexus.emit('nexus:save', { slot: i });
+      else                 nexus.emit('nexus:load', { slot: i });
+    });
+    list.appendChild(row);
+  }
+}
+
+nexus.on('nexus:save', ({ slot } = {}) => {
+  const state = {
+    activeTab:    document.querySelector('.tab-button.is-active')?.dataset.tab ?? 'map',
+    highContrast: cfg.highContrast,
+    accentColor:  cfg.accentColor,
+    dangerColor:  cfg.dangerColor,
+    warningColor: cfg.warningColor,
+    savedAt:      Date.now(),
+    // --- YOUR GAME STATE GOES HERE ---
+    // Add any serializable game data to this object.
+    // Keep it JSON-safe (no functions, no circular refs, no DOM nodes).
+    // Example:
+    //   resources: { gold: 500, wood: 120 },
+    //   units:     myGame.getUnits().map(u => u.serialize()),
+    //   mapState:  myGrid.export(),
+  };
+  localStorage.setItem(getSaveKey(slot), JSON.stringify(state));
+  nexus.emit('nexus:toast', { msg: `Saved to slot ${slot}`, type: 'ok' });
+  nexus.emit('nexus:log',   { tag: 'ok', msg: `State saved — slot ${slot}` });
+  nexus.emit('nexus:haptic', { pattern: [40, 20, 40] });
+});
+
+nexus.on('nexus:load', ({ slot } = {}) => {
+  const data = readSlot(slot);
+  if (!data) {
+    nexus.emit('nexus:toast', { msg: `Slot ${slot} is empty`, type: 'warn' });
+    return;
+  }
+  if (data.activeTab) nexus.emit('nexus:tab', { id: data.activeTab });
+  if (typeof data.highContrast === 'boolean' && data.highContrast !== cfg.highContrast) {
+    cfg.highContrast = data.highContrast;
+    applyHighContrast(cfg.highContrast);
+    hcToggle.checked = cfg.highContrast;
+  }
+  // Restore saved custom colors if present
+  if (data.accentColor)  { cfg.accentColor  = data.accentColor;  accentPicker.value  = data.accentColor; }
+  if (data.dangerColor)  { cfg.dangerColor  = data.dangerColor;  dangerPicker.value  = data.dangerColor; }
+  if (data.warningColor) { cfg.warningColor = data.warningColor; warningPicker.value = data.warningColor; }
+  if (data.accentColor || data.dangerColor || data.warningColor) applyThemeColors();
+  // --- RESTORE YOUR GAME STATE HERE ---
+  // Read back the fields you saved above and restore your game to that state.
+  // Example:
+  //   if (data.resources) myGame.setResources(data.resources);
+  //   if (data.units)     myGame.loadUnits(data.units);
+  //   if (data.mapState)  myGrid.import(data.mapState);
+  nexus.emit('nexus:toast', { msg: `Slot ${slot} loaded`, type: 'ok' });
+  nexus.emit('nexus:log',   { tag: 'ok', msg: `State loaded — slot ${slot}` });
+  nexus.emit('nexus:haptic', { pattern: 30 });
+});
+
+/* ============================================================
+   NEXUS SHELL — MODAL MANAGEMENT
+   Generic open/close for all bottom sheet overlays.
+   ============================================================ */
+function openModal(modalId) {
+  document.getElementById(modalId)?.classList.add('is-open');
+}
+
+function closeModal(modalId) {
+  document.getElementById(modalId)?.classList.remove('is-open');
+}
+
+// Close buttons (data-close attribute)
+document.querySelectorAll('[data-close]').forEach(btn => {
+  btn.addEventListener('click', () => closeModal(btn.dataset.close));
+});
+
+// Tap outside sheet to close
+document.querySelectorAll('.bottom-sheet-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeModal(overlay.id);
+  });
+});
+
+/* ============================================================
+   NEXUS SHELL — TOOLBAR BUTTONS
+   ============================================================ */
+
+// ── Fullscreen ──
+const fullscreenBtn = document.getElementById('btn-fullscreen');
+fullscreenBtn.addEventListener('click', () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  else document.exitFullscreen().catch(() => {});
+});
+document.addEventListener('fullscreenchange', () => {
+  const active = !!document.fullscreenElement;
+  fullscreenBtn.textContent = active ? '✕' : '⛶';
+  fullscreenBtn.classList.toggle('is-active', active);
+});
+
+// ── High Contrast (wired to settings toggle) ──
+const hcToggle = document.getElementById('set-hc');
+hcToggle.checked = cfg.highContrast;
+hcToggle.addEventListener('change', () => {
+  cfg.highContrast = hcToggle.checked;
+  applyHighContrast(cfg.highContrast);
+  saveSettings(cfg);
+  nexus.emit('nexus:toast', { msg: cfg.highContrast ? '⚡ High Contrast ON' : '🌙 Dark Mode ON', type: 'inf' });
+  nexus.emit('nexus:settings:changed', { key: 'highContrast', value: cfg.highContrast });
+});
+
+// ── Save / Load ──
+document.getElementById('btn-save').addEventListener('click', () => {
+  document.getElementById('slot-modal-title').textContent = 'Save to slot';
+  buildSlotRows('save');
+  openModal('modal-slots');
+});
+document.getElementById('btn-load').addEventListener('click', () => {
+  document.getElementById('slot-modal-title').textContent = 'Load slot';
+  buildSlotRows('load');
+  openModal('modal-slots');
+});
+
+// ── Settings ──
+document.getElementById('btn-settings').addEventListener('click', () => {
+  document.getElementById('confirm-clear').classList.remove('is-open');
+  openModal('modal-settings');
+});
+
+// ── About ──
+document.getElementById('btn-info').addEventListener('click', () => openModal('modal-about'));
+
+/* ============================================================
+   NEXUS SHELL — SETTINGS PANEL CONTROLS
+   ============================================================ */
+const audioToggle   = document.getElementById('set-audio');
+const volumeSlider  = document.getElementById('set-volume');
+const vibroToggle   = document.getElementById('set-vibro');
+const volumeDisplay = document.getElementById('vol-display');
+const accentPicker  = document.getElementById('pick-accent');
+const dangerPicker  = document.getElementById('pick-danger');
+const warningPicker = document.getElementById('pick-warning');
+
+// Sync controls to loaded settings (including persisted custom colors)
+audioToggle.checked  = cfg.audioEnabled;
+vibroToggle.checked  = cfg.vibroEnabled;
+volumeSlider.value   = cfg.volume;
+volumeDisplay.textContent = cfg.volume + '%';
+accentPicker.value   = cfg.accentColor;
+dangerPicker.value   = cfg.dangerColor;
+warningPicker.value  = cfg.warningColor;
+// Apply persisted colors to CSS vars immediately (already done by applyThemeColors at boot,
+// but picker elements need their value set before the user opens settings)
+
+audioToggle.addEventListener('change', () => {
+  cfg.audioEnabled = audioToggle.checked;
+  saveSettings(cfg);
+  nexus.emit('nexus:toast', { msg: cfg.audioEnabled ? '🔔 Audio on' : '🔕 Audio off', type: 'inf' });
+  nexus.emit('nexus:settings:changed', { key: 'audioEnabled', value: cfg.audioEnabled });
+});
+
+volumeSlider.addEventListener('input', () => {
+  cfg.volume = parseInt(volumeSlider.value);
+  volumeDisplay.textContent = cfg.volume + '%';
+  if (cfg.audioEnabled) shellAudio.volume = cfg.volume / 100;
+  saveSettings(cfg);
+  nexus.emit('nexus:settings:changed', { key: 'volume', value: cfg.volume });
+});
+
+vibroToggle.addEventListener('change', () => {
+  cfg.vibroEnabled = vibroToggle.checked;
+  saveSettings(cfg);
+  if (cfg.vibroEnabled) nexus.emit('nexus:haptic', { pattern: [30, 20, 30] });
+  nexus.emit('nexus:toast', { msg: cfg.vibroEnabled ? '📳 Haptic on' : '📴 Haptic off', type: 'inf' });
+  nexus.emit('nexus:settings:changed', { key: 'vibroEnabled', value: cfg.vibroEnabled });
+});
+
+function onColorChange(key, cssVar, picker) {
+  picker.addEventListener('input', () => {
+    cfg[key] = picker.value;
+    document.documentElement.style.setProperty(cssVar, picker.value);
+    saveSettings(cfg);
+    nexus.emit('nexus:settings:changed', { key, value: picker.value });
+  });
+}
+onColorChange('accentColor',  '--color-accent',  accentPicker);
+onColorChange('dangerColor',  '--color-danger',  dangerPicker);
+onColorChange('warningColor', '--color-warning', warningPicker);
+
+// ── Clear saves ──
+document.getElementById('btn-clear-saves').addEventListener('click', () => {
+  document.getElementById('confirm-clear').classList.add('is-open');
+  nexus.emit('nexus:haptic', { pattern: 50 });
+});
+document.getElementById('btn-confirm-no').addEventListener('click', () => {
+  document.getElementById('confirm-clear').classList.remove('is-open');
+});
+document.getElementById('btn-confirm-yes').addEventListener('click', () => {
+  for (let i = 1; i <= SAVE_SLOT_COUNT; i++) localStorage.removeItem(getSaveKey(i));
+  document.getElementById('confirm-clear').classList.remove('is-open');
+  closeModal('modal-settings');
+  nexus.emit('nexus:toast',  { msg: 'All saves deleted', type: 'err' });
+  nexus.emit('nexus:haptic', { pattern: [50, 30, 50] });
+});
+
+/* ============================================================
+   NEXUS SHELL — DEVICE & APP LIFECYCLE EVENTS
+   Wires browser APIs to the bus so your game never has to.
+   ============================================================ */
+window.addEventListener('online',  () => {
+  nexus.emit('nexus:net:online');
+  nexus.emit('nexus:log',   { tag: 'ok',  msg: 'Network connection restored' });
+  nexus.emit('nexus:toast', { msg: '🌐 Back online', type: 'ok' });
+});
+window.addEventListener('offline', () => {
+  nexus.emit('nexus:net:offline');
+  nexus.emit('nexus:log',   { tag: 'err', msg: 'Network connection lost' });
+  nexus.emit('nexus:toast', { msg: '📵 Offline', type: 'err' });
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    nexus.emit('nexus:app:hidden');
+    nexus.emit('nexus:log', { tag: 'wrn', msg: 'App moved to background' });
+  } else {
+    nexus.emit('nexus:app:visible');
+    nexus.emit('nexus:log', { tag: 'inf', msg: 'App returned to foreground' });
+  }
+});
+
+/* ============================================================
+   NEXUS SHELL — DEMO CONTENT
+   Everything below this line is demo-only and must be replaced.
+
+   CHECKLIST when adapting this boilerplate:
+   1. Delete the MAP_LAYOUT block and build your own panel content.
+   2. Replace DEMO_BOOT_LOGS / DEMO_LIVE_LOGS with your game's real events.
+   3. Remove the demo score interval; emit nexus:game:score from your game loop.
+   4. Remove or replace the demo badge counts with real game logic.
+   5. Replace the welcome toasts with your game's startup sequence.
+   ============================================================ */
+
+// ── [DEMO] Map grid — replace with your own panel content ──
+// Each tab-panel can contain any HTML. This is just an example
+// of what a strategy game map panel might look like.
+// YOUR CODE HERE: populate #panel-map (and all other panels) with your game UI.
+const MAP_LAYOUT = [
+  'is-water','is-water','is-land', 'is-land', 'is-fog',   'is-fog',   'is-fog',  'is-fog',
+  'is-water','is-land', 'is-land', 'is-city', 'is-fog',   'is-fog',   'is-fog',  'is-fog',
+  'is-land', 'is-land', 'is-land', 'is-land', 'is-land',  'is-fog',   'is-fog',  'is-fog',
+  'is-land', 'is-city', 'is-land', 'is-land', 'is-land',  'is-land',  'is-fog',  'is-fog',
+  'is-land', 'is-land', 'is-player','is-land','is-land',  'is-enemy', 'is-fog',  'is-fog',
+  'is-land', 'is-land', 'is-land', 'is-land', 'is-enemy', 'is-enemy', 'is-fog',  'is-fog',
+  'is-water','is-land', 'is-land', 'is-land', 'is-land',  'is-land',  'is-land', 'is-fog',
+  'is-water','is-water','is-water','is-land', 'is-land',  'is-land',  'is-land', 'is-land',
+];
+const mapGrid = document.getElementById('map-grid');
+MAP_LAYOUT.forEach(type => {
+  const cell = document.createElement('div');
+  cell.className = `map-cell ${type}`;
+  mapGrid.appendChild(cell);
+});
+
+// ── [DEMO] Boot log sequence — replace with your game's startup messages ──
+// YOUR CODE HERE: emit nexus:log events from your own initialization code.
+// Example: nexus.emit('nexus:log', { tag: 'ok', msg: 'My game loaded' })
+const DEMO_BOOT_LOGS = [
+  { tag: 'ok',  msg: 'Session initialized — NEXUS v1.0.0' },
+  { tag: 'inf', msg: 'Loading sector data: 7G… done' },
+  { tag: 'inf', msg: 'Syncing guild roster: 28 members online' },
+  { tag: 'wrn', msg: 'North base health at 34% — reinforcements needed' },
+  { tag: 'err', msg: 'Connection lost with outpost C4 — retry in 5s' },
+  { tag: 'ok',  msg: 'Drone #3 deployed — coverage active' },
+  { tag: 'inf', msg: 'Enemy activity detected at grid E5' },
+  { tag: 'ok',  msg: 'Outpost C4 reconnected' },
+  { tag: 'wrn', msg: 'Ammo reserves at 18% — resupply recommended' },
+  { tag: 'inf', msg: 'FOXHOUND reached north base' },
+  { tag: 'ok',  msg: 'North flank suppressed — threat reduced' },
+  { tag: 'inf', msg: 'Daily mission available: Capture Grid F7' },
+];
+
+// Emit first 6 boot logs with staggered delays, then start the interval
+// after all initial timeouts have completed to avoid race conditions.
+const BOOT_BURST_COUNT = 6;
+const BOOT_BURST_DELAY = 120; // ms between each
+
+DEMO_BOOT_LOGS.slice(0, BOOT_BURST_COUNT).forEach((entry, i) => {
+  setTimeout(() => nexus.emit('nexus:log', entry), i * BOOT_BURST_DELAY);
+});
+
+let demoLogIndex = BOOT_BURST_COUNT;
+const DEMO_LIVE_LOGS = [
+  { tag: 'inf', msg: 'Heartbeat OK — latency 42ms' },
+  { tag: 'wrn', msg: 'Player GRIMM idle for 3 min' },
+  { tag: 'ok',  msg: 'XP awarded: +120 (combat bonus)' },
+  { tag: 'inf', msg: 'Guild event starts in 00:14:32' },
+  { tag: 'err', msg: 'Packet loss 2.1% — monitoring' },
+];
+
+// Start interval only after burst is guaranteed complete
+const BURST_DONE_AT = BOOT_BURST_COUNT * BOOT_BURST_DELAY + 200;
+setTimeout(() => {
+  setInterval(() => {
+    const entry = demoLogIndex < DEMO_BOOT_LOGS.length
+      ? DEMO_BOOT_LOGS[demoLogIndex++]
+      : DEMO_LIVE_LOGS[Math.floor(Math.random() * DEMO_LIVE_LOGS.length)];
+    nexus.emit('nexus:log', entry);
+  }, 3500);
+}, BURST_DONE_AT);
+
+// ── [DEMO] Score ticker — remove and drive from your game loop ──
+// YOUR CODE HERE: call nexus.emit('nexus:game:score', { score, level, xp })
+// from your game logic whenever these values change.
+let demoScore = 0;
+setInterval(() => {
+  demoScore = Math.min(demoScore + Math.floor(Math.random() * 120 + 10), 999999);
+  nexus.emit('nexus:game:score', { score: demoScore });
+}, 4000);
+
+// ── [DEMO] Badge counts — drive from real game events ──
+// YOUR CODE HERE: emit nexus:badge whenever unread counts change in your game.
+// Example: nexus.emit('nexus:badge', { tab: 'chat', count: unreadMessages })
+//          nexus.emit('nexus:badge', { tab: 'chat', count: 0 }) // to clear
+nexus.emit('nexus:badge', { tab: 'stats', count: 3 });
+nexus.emit('nexus:badge', { tab: 'chat',  count: 7 });
+
+// Demo: welcome toasts
+setTimeout(() => nexus.emit('nexus:toast', { msg: 'NEXUS v1.0.0 — Ready', type: 'ok' }), 800);
+setTimeout(() => nexus.emit('nexus:toast', { msg: 'North base under attack! ⚠', type: 'warn' }), 3200);
+
+</script>
+</body>
+</html>
